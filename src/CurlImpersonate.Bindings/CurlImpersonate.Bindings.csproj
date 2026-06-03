@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <PackageId>CurlImpersonate.Bindings</PackageId>
+    <Version>1.0.1</Version>
+    <Authors>curl-impersonate-dotnet contributors</Authors>
+    <Description>.NET bindings for curl-impersonate: browser TLS/HTTP2 fingerprint impersonation (JA3/JA4). Bundles win-x64 and linux-x64 native libraries.</Description>
+    <PackageTags>curl;impersonate;tls;fingerprint;http;browser</PackageTags>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="runtimes/win-x64/native/cidn_wrapper.dll"
+          Condition="Exists('runtimes/win-x64/native/cidn_wrapper.dll')">
+      <Pack>true</Pack>
+      <PackagePath>runtimes/win-x64/native/cidn_wrapper.dll</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="runtimes/win-x64/native/libcurl-impersonate.dll"
+          Condition="Exists('runtimes/win-x64/native/libcurl-impersonate.dll')">
+      <Pack>true</Pack>
+      <PackagePath>runtimes/win-x64/native/libcurl-impersonate.dll</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="runtimes/linux-x64/native/libcidn_wrapper.so"
+          Condition="Exists('runtimes/linux-x64/native/libcidn_wrapper.so')">
+      <Pack>true</Pack>
+      <PackagePath>runtimes/linux-x64/native/libcidn_wrapper.so</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="runtimes/linux-x64/native/libcurl-impersonate-chrome.so"
+          Condition="Exists('runtimes/linux-x64/native/libcurl-impersonate-chrome.so')">
+      <Pack>true</Pack>
+      <PackagePath>runtimes/linux-x64/native/libcurl-impersonate-chrome.so</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

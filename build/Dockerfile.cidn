@@ -1,0 +1,41 @@
+# Self-contained build: compiles libcidn_wrapper.so, fetches upstream libcurl-impersonate,
+# and packs CurlImpersonate.Bindings.nupkg into /nuget-feed.
+#
+# Build:
+#   docker build --platform linux/amd64 -t cortex-cidn-pack -f build/Dockerfile.cidn .
+#
+# Extract the .nupkg:
+#   mkdir -p out/nuget
+#   docker run --rm -v "$(pwd)/out/nuget:/out" cortex-cidn-pack cp /nuget-feed/*.nupkg /out/
+
+# Stage 1: compile the wrapper .so
+FROM gcc:13 AS native-build
+RUN apt-get update && apt-get install -y --no-install-recommends cmake make \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY native/ native/
+RUN cmake -S native -B /build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc \
+ && cmake --build /build --config Release
+
+# Stage 2: fetch upstream libcurl-impersonate
+FROM debian:bookworm-slim AS upstream-fetch
+ARG CURL_IMPERSONATE_VERSION=1.5.6
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL \
+    "https://github.com/lexiforest/curl-impersonate/releases/download/v${CURL_IMPERSONATE_VERSION}/libcurl-impersonate-v${CURL_IMPERSONATE_VERSION}.x86_64-linux-gnu.tar.gz" \
+    | tar -xz -C /tmp \
+ && find /tmp -name "libcurl-impersonate.so.*.*" -type f | head -1 \
+    | xargs -I{} cp {} /libcurl-impersonate-chrome.so
+
+# Stage 3: pack NuGet
+FROM mcr.microsoft.com/dotnet/sdk:9.0
+WORKDIR /repo
+COPY src/ src/
+COPY --from=native-build /build/staging/libcidn_wrapper.so \
+     src/CurlImpersonate.Bindings/runtimes/linux-x64/native/libcidn_wrapper.so
+COPY --from=upstream-fetch /libcurl-impersonate-chrome.so \
+     src/CurlImpersonate.Bindings/runtimes/linux-x64/native/libcurl-impersonate-chrome.so
+RUN dotnet pack src/CurlImpersonate.Bindings/CurlImpersonate.Bindings.csproj \
+    -c Release -o /nuget-feed \
+ && ls -lh /nuget-feed

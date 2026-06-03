@@ -1,0 +1,54 @@
+# Stage 1: build cidn_wrapper.so using gcc on glibc (not musl)
+FROM gcc:13 AS native-build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmake \
+    make \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY native/ native/
+
+RUN cmake -S native -B /build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_C_COMPILER=gcc \
+    && cmake --build /build --config Release
+
+# Stage 2: dotnet SDK to build + test
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS dotnet-build
+
+WORKDIR /repo
+
+# Copy managed source
+COPY src/ src/
+COPY tests/ tests/
+COPY samples/ samples/
+COPY CurlImpersonate.slnx ./
+
+# Copy the wrapper .so from stage 1
+COPY --from=native-build /build/staging/libcidn_wrapper.so \
+     src/CurlImpersonate.Bindings/runtimes/linux-x64/native/libcidn_wrapper.so
+
+# The upstream libcurl-impersonate must be bind-mounted or COPY'd at docker build time.
+# Build the docker image with:
+#   docker build -f build/Dockerfile.linux \
+#     --build-arg UPSTREAM_SO=<path-to-libcurl-impersonate.so> .
+# Or pass it via a separate COPY below (uncomment + adjust path):
+# COPY <local-path>/libcurl-impersonate-chrome.so \
+#      src/CurlImpersonate.Bindings/runtimes/linux-x64/native/libcurl-impersonate-chrome.so
+
+RUN dotnet restore CurlImpersonate.slnx
+
+RUN dotnet build CurlImpersonate.slnx -c Release --no-restore
+
+# Run unit tests (skip integration + fingerprint which need network)
+RUN dotnet test tests/CurlImpersonate.Tests/CurlImpersonate.Tests.csproj \
+    --no-build -c Release \
+    --filter "Category!=Integration&Category!=Fingerprint" \
+    --logger "console;verbosity=normal"
+
+# Export the .so so the host can docker cp it
+RUN mkdir /export && \
+    cp src/CurlImpersonate.Bindings/runtimes/linux-x64/native/libcidn_wrapper.so /export/
+
+CMD ["/bin/bash"]
