@@ -20,7 +20,8 @@ Console.WriteLine("-- GET https://httpbin.org/get");
 var resp = await client.GetAsync("https://httpbin.org/get");
 Console.WriteLine($"   Status: {(int)resp.StatusCode} {resp.StatusCode}");
 Console.WriteLine($"   Effective URL: {resp.EffectiveUrl}");
-Console.WriteLine($"   Body snippet: {resp.GetBodyAsString()[..Math.Min(200, resp.Body.Length)]}");
+var snippet = resp.GetBodyAsString();
+Console.WriteLine($"   Body snippet: {snippet[..Math.Min(200, snippet.Length)]}");
 Console.WriteLine();
 
 // 2. TLS fingerprint check
