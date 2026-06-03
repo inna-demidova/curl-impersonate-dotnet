@@ -4,6 +4,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
+
+/* Upper bound on a buffered (non-streaming) response body / header blob.
+ * Kept just under 2 GiB so the managed (int)body_len cast stays valid and a
+ * runaway response aborts instead of exhausting memory. */
+#define CIDN_MAX_BUFFERED_BYTES ((size_t)0x7FFFF000)  /* ~2 GiB - 4 KiB */
+
+#ifdef _WIN32
+  #define cidn_strcaseeq(a, b) (_stricmp((a), (b)) == 0)
+#else
+  #include <strings.h>
+  #define cidn_strcaseeq(a, b) (strcasecmp((a), (b)) == 0)
+#endif
 
 #ifdef _WIN32
   #define WIN32_LEAN_AND_MEAN
@@ -155,9 +168,9 @@ typedef struct cidn_request_s {
     char*              proxy;
     char*              proxy_userpwd;
     int                follow_redirects;
-    long               max_redirects;
-    long               timeout_ms;
-    long               connect_timeout_ms;
+    int64_t            max_redirects;
+    int64_t            timeout_ms;
+    int64_t            connect_timeout_ms;
     char*              accept_encoding;
     int                verify_peer;
     int                verify_host;
@@ -213,11 +226,11 @@ int cidn_request_set_proxy(cidn_request_t req, const char* proxy, const char* us
     free(r->proxy_userpwd); r->proxy_userpwd = userpwd ? strdup(userpwd) : NULL;
     return 0;
 }
-int cidn_request_set_follow_redirects(cidn_request_t req, int follow, long max_r) {
+int cidn_request_set_follow_redirects(cidn_request_t req, int follow, int64_t max_r) {
     cidn_request_impl_t* r = (cidn_request_impl_t*)req;
     r->follow_redirects = follow; r->max_redirects = max_r; return 0;
 }
-int cidn_request_set_timeout_ms(cidn_request_t req, long total_ms, long connect_ms) {
+int cidn_request_set_timeout_ms(cidn_request_t req, int64_t total_ms, int64_t connect_ms) {
     cidn_request_impl_t* r = (cidn_request_impl_t*)req;
     r->timeout_ms = total_ms; r->connect_timeout_ms = connect_ms; return 0;
 }
@@ -296,10 +309,14 @@ static CURL* setup_easy(const cidn_sym_table_t* s, cidn_session_impl_t* sess,
 
     cidn_setopt_ptr (s, h, CURLOPT_URL,            req->url);
     cidn_setopt_ptr (s, h, CURLOPT_CUSTOMREQUEST,  req->method);
+    /* A HEAD must use CURLOPT_NOBODY, otherwise curl waits for a body that
+     * never arrives and the transfer stalls until the timeout fires. */
+    if (req->method && cidn_strcaseeq(req->method, "HEAD"))
+        cidn_setopt_long(s, h, CURLOPT_NOBODY, 1L);
     cidn_setopt_long(s, h, CURLOPT_FOLLOWLOCATION, req->follow_redirects);
-    cidn_setopt_long(s, h, CURLOPT_MAXREDIRS,      req->max_redirects);
-    cidn_setopt_long(s, h, CURLOPT_TIMEOUT_MS,     req->timeout_ms);
-    cidn_setopt_long(s, h, CURLOPT_CONNECTTIMEOUT_MS, req->connect_timeout_ms);
+    cidn_setopt_long(s, h, CURLOPT_MAXREDIRS,      (long)req->max_redirects);
+    cidn_setopt_long(s, h, CURLOPT_TIMEOUT_MS,     (long)req->timeout_ms);
+    cidn_setopt_long(s, h, CURLOPT_CONNECTTIMEOUT_MS, (long)req->connect_timeout_ms);
     cidn_setopt_long(s, h, CURLOPT_SSL_VERIFYPEER, req->verify_peer);
     cidn_setopt_long(s, h, CURLOPT_SSL_VERIFYHOST, req->verify_host);
     cidn_setopt_long(s, h, CURLOPT_VERBOSE,        req->verbose);
@@ -339,10 +356,19 @@ typedef struct { uint8_t* buf; size_t len; size_t cap; } dyn_buf_t;
 
 static size_t write_to_dyn(const char* ptr, size_t sz, size_t nmemb, void* ud) {
     dyn_buf_t* b = (dyn_buf_t*)ud;
+    /* curl guarantees sz == 1 for write/header data, but guard the product anyway. */
+    if (nmemb != 0 && sz > SIZE_MAX / nmemb) return 0;     /* sz*nmemb overflow */
     size_t n = sz * nmemb;
-    if (b->len + n + 1 > b->cap) {
-        size_t new_cap = (b->cap ? b->cap * 2 : 4096);
-        while (new_cap < b->len + n + 1) new_cap *= 2;
+
+    if (n + 1 > b->cap - b->len) {                          /* need to grow */
+        if (n > SIZE_MAX - b->len - 1) return 0;            /* len+n+1 overflow */
+        size_t needed = b->len + n + 1;
+        if (needed > CIDN_MAX_BUFFERED_BYTES) return 0;     /* cap exceeded → abort */
+        size_t new_cap = (b->cap ? b->cap : 4096);
+        while (new_cap < needed) {
+            if (new_cap > SIZE_MAX / 2) { new_cap = needed; break; }
+            new_cap *= 2;
+        }
         uint8_t* nb = realloc(b->buf, new_cap);
         if (!nb) return 0;
         b->buf = nb; b->cap = new_cap;
@@ -455,7 +481,11 @@ int cidn_session_execute_stream(cidn_session_t session, cidn_request_t req,
 
     CURLcode rc = s->easy_perform(h);
     if (rc == CURLE_OK && out_status) {
-        cidn_getinfo_long(s, h, CURLINFO_RESPONSE_CODE, out_status);
+        /* curl writes a C long (32-bit on Windows); read into a local long and
+         * widen, otherwise the upper 4 bytes of *out_status are left garbage. */
+        long status = 0;
+        cidn_getinfo_long(s, h, CURLINFO_RESPONSE_CODE, &status);
+        *out_status = (int64_t)status;
     }
     s->easy_cleanup(h);
     return rc == CURLE_OK ? 0 : (int)rc;
