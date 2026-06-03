@@ -8,7 +8,14 @@ public static class NativeLoader
 {
     private static string? _upstreamLibPath;
     private static bool _initialized;
+    private static int _liveClients;
     private static readonly object _lock = new();
+
+    /// <summary>Tracks a live <see cref="ImpersonateClient"/> so <see cref="Cleanup"/> can refuse
+    /// to unload the native library while sessions are still in use.</summary>
+    internal static void RegisterClient() => Interlocked.Increment(ref _liveClients);
+
+    internal static void UnregisterClient() => Interlocked.Decrement(ref _liveClients);
 
     [ModuleInitializer]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2255")]
@@ -77,6 +84,13 @@ public static class NativeLoader
         lock (_lock)
         {
             if (!_initialized) return;
+
+            var live = Volatile.Read(ref _liveClients);
+            if (live > 0)
+                throw new InvalidOperationException(
+                    $"Cannot clean up the native library while {live} ImpersonateClient instance(s) " +
+                    "are still alive. Dispose all clients before calling NativeLoader.Cleanup().");
+
             NativeMethods.GlobalCleanup();
             _initialized = false;
         }
