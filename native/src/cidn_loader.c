@@ -107,10 +107,12 @@ fail:
 }
 
 void cidn_loader_unload(void) {
-    if (g_lib) {
-        lib_close(g_lib);
-        g_lib = NULL;
-    }
+    /* Intentionally do NOT dlclose/FreeLibrary the upstream library. curl-impersonate links
+     * BoringSSL, whose library destructors crash when the module is unloaded after TLS has been
+     * used (SSL session cache + thread-locals are torn down on dlclose). The handle is left mapped
+     * for the lifetime of the process and reclaimed by the OS at exit; we only drop our references
+     * so the library can be re-resolved if cidn_global_init is called again. */
+    g_lib = NULL;
     g_loaded = 0;
     memset(&g_syms, 0, sizeof(g_syms));
 }
