@@ -1,0 +1,34 @@
+name: Tests
+
+# Runs the full test suite on a GitHub-hosted runner whenever a PR against main is
+# opened (and on each subsequent push to that PR). Manual runs via the Actions tab too.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+# Cancel an in-flight run for the same PR when new commits are pushed.
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux (native build + full test suite)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # build/Dockerfile.linux: compiles the cidn_wrapper.so, pulls the upstream
+      # curl-impersonate .so via build/fetch-upstream.ps1 -Platform linux, builds the
+      # .NET solution, and runs the offline Native tests at image-build time.
+      - name: Build Linux test image
+        run: docker build -f build/Dockerfile.linux -t cidn-linux-build .
+
+      # Runs every category (Native + Integration + Streaming + Fingerprint) against the
+      # real network, exercising actual browser impersonation against tls.peet.ws.
+      # (Streaming and Fingerprint classes also carry the Integration trait.)
+      - name: Run full test suite
+        run: docker run --rm cidn-linux-build --filter "Category=Native|Category=Integration"
