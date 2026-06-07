@@ -14,12 +14,20 @@ RUN cmake -S native -B /build \
         -DCMAKE_C_COMPILER=gcc \
     && cmake --build /build --config Release
 
-# Stage 2: dotnet SDK to build + test
+# Stage 2: dotnet SDK to fetch the upstream lib, build, and test
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS dotnet-build
+
+# Upstream curl-impersonate version to pull (overridable: --build-arg CURL_IMPERSONATE_VERSION=...)
+ARG CURL_IMPERSONATE_VERSION=1.5.6
+
+# The library/tests target net8.0; this SDK image ships only the .NET 9 runtime, so roll the
+# net8.0 testhost forward to it. (Drop this if the base image is switched to sdk:8.0.)
+ENV DOTNET_ROLL_FORWARD=Major
 
 WORKDIR /repo
 
-# Copy managed source
+# Copy managed source + build scripts
+COPY build/ build/
 COPY src/ src/
 COPY tests/ tests/
 COPY samples/ samples/
@@ -29,26 +37,30 @@ COPY CurlImpersonate.slnx ./
 COPY --from=native-build /build/staging/libcidn_wrapper.so \
      src/CurlImpersonate.Bindings/runtimes/linux-x64/native/libcidn_wrapper.so
 
-# The upstream libcurl-impersonate must be bind-mounted or COPY'd at docker build time.
-# Build the docker image with:
-#   docker build -f build/Dockerfile.linux \
-#     --build-arg UPSTREAM_SO=<path-to-libcurl-impersonate.so> .
-# Or pass it via a separate COPY below (uncomment + adjust path):
-# COPY <local-path>/libcurl-impersonate-chrome.so \
-#      src/CurlImpersonate.Bindings/runtimes/linux-x64/native/libcurl-impersonate-chrome.so
+# Pull the upstream libcurl-impersonate .so via the configurable fetch script. The SDK image ships
+# pwsh + tar + curl, so the same script used on a Windows host (default) works here with -Platform linux.
+RUN pwsh build/fetch-upstream.ps1 -Platform linux -Version "$CURL_IMPERSONATE_VERSION"
 
 RUN dotnet restore CurlImpersonate.slnx
 
 RUN dotnet build CurlImpersonate.slnx -c Release --no-restore
 
-# Run unit tests (skip integration + fingerprint which need network)
+# Native tests run at build time: they need only the staged libs (no network) and prove the wrapper
+# + upstream library load and all symbols resolve on Linux. Integration/Fingerprint need live
+# network and run at `docker run` time (see ENTRYPOINT/CMD below).
 RUN dotnet test tests/CurlImpersonate.Tests/CurlImpersonate.Tests.csproj \
     --no-build -c Release \
-    --filter "Category!=Integration&Category!=Fingerprint" \
+    --filter "Category=Native" \
     --logger "console;verbosity=normal"
 
-# Export the .so so the host can docker cp it
+# Export the .so so the host can docker cp it (used by build-linux.ps1)
 RUN mkdir /export && \
     cp src/CurlImpersonate.Bindings/runtimes/linux-x64/native/libcidn_wrapper.so /export/
 
-CMD ["/bin/bash"]
+# `docker run <image>` runs the live-network test suite (excluding the brittle exact-hash
+# Fingerprint category by default). Override the filter, e.g.:
+#   docker run <image> --filter "Category=Native"          # offline only
+#   docker run <image> --filter "FullyQualifiedName~Fingerprint"   # include fingerprint
+ENTRYPOINT ["dotnet", "test", "tests/CurlImpersonate.Tests/CurlImpersonate.Tests.csproj", \
+            "--no-build", "-c", "Release", "--logger", "console;verbosity=normal"]
+CMD ["--filter", "Category!=Fingerprint"]

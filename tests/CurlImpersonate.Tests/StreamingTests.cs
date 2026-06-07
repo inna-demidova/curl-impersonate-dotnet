@@ -10,13 +10,13 @@ namespace CurlImpersonate.Tests;
 /// </summary>
 [Trait("Category", "Integration")]
 [Trait("Category", "Streaming")]
+[Collection("native")]
 public class StreamingTests : IDisposable
 {
     private readonly ImpersonateClient _client;
 
     public StreamingTests()
     {
-        NativeLoader.Initialize();
         _client = new ImpersonateClient(new ClientOptions
         {
             DefaultTarget = ImpersonateTarget.Chrome116,
@@ -24,11 +24,7 @@ public class StreamingTests : IDisposable
         });
     }
 
-    public void Dispose()
-    {
-        _client.Dispose();
-        NativeLoader.Cleanup();
-    }
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task StreamingGet_ReceivesAllBytes()

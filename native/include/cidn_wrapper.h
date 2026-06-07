@@ -58,8 +58,8 @@ CIDN_API int cidn_request_add_header(cidn_request_t req, const char* header);
 CIDN_API int cidn_request_set_body(cidn_request_t req, const uint8_t* data, size_t len);
 CIDN_API int cidn_request_set_impersonate(cidn_request_t req, const char* target, int default_headers);
 CIDN_API int cidn_request_set_proxy(cidn_request_t req, const char* proxy, const char* userpwd);
-CIDN_API int cidn_request_set_follow_redirects(cidn_request_t req, int follow, long max_redirects);
-CIDN_API int cidn_request_set_timeout_ms(cidn_request_t req, long total_ms, long connect_ms);
+CIDN_API int cidn_request_set_follow_redirects(cidn_request_t req, int follow, int64_t max_redirects);
+CIDN_API int cidn_request_set_timeout_ms(cidn_request_t req, int64_t total_ms, int64_t connect_ms);
 CIDN_API int cidn_request_set_accept_encoding(cidn_request_t req, const char* encoding);
 CIDN_API int cidn_request_set_verify(cidn_request_t req, int peer, int host);
 CIDN_API int cidn_request_set_cookie(cidn_request_t req, const char* cookie);
@@ -77,7 +77,7 @@ CIDN_API int cidn_request_set_abort_flag(cidn_request_t req, volatile int* flag)
  * --------------------------------------------------------------------- */
 
 typedef struct cidn_response_s {
-    long     status_code;
+    int64_t  status_code;
     char*    headers_blob;  /* all headers concatenated, CRLF-separated */
     uint8_t* body;
     size_t   body_len;
@@ -104,7 +104,7 @@ CIDN_API int cidn_session_execute_stream(
     void*           body_ud,
     cidn_header_cb  header_cb,
     void*           hdr_ud,
-    long*           out_status
+    int64_t*        out_status
 );
 
 #ifdef __cplusplus

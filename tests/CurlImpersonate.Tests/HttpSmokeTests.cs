@@ -8,13 +8,13 @@ namespace CurlImpersonate.Tests;
 /// Basic HTTP smoke tests. Requires network access and the native libs to be staged.
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection("native")]
 public class HttpSmokeTests : IDisposable
 {
     private readonly ImpersonateClient _client;
 
     public HttpSmokeTests()
     {
-        NativeLoader.Initialize();
         _client = new ImpersonateClient(new ClientOptions
         {
             DefaultTarget = ImpersonateTarget.Chrome131,
@@ -23,11 +23,7 @@ public class HttpSmokeTests : IDisposable
         });
     }
 
-    public void Dispose()
-    {
-        _client.Dispose();
-        NativeLoader.Cleanup();
-    }
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task Get_HttpBin_Returns200()

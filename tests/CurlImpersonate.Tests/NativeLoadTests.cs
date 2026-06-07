@@ -9,15 +9,11 @@ namespace CurlImpersonate.Tests;
 /// These tests require the native libraries to be staged in runtimes/{rid}/native/.
 /// </summary>
 [Trait("Category", "Native")]
-public class NativeLoadTests : IDisposable
+[Collection("native")]
+public class NativeLoadTests
 {
-    public NativeLoadTests()
-    {
-        // NativeLoader.Initialize() will find the upstream lib from runtimes/{rid}/native/
-        NativeLoader.Initialize();
-    }
-
-    public void Dispose() => NativeLoader.Cleanup();
+    // The native library is initialized once by the shared NativeLibraryFixture ("native"
+    // collection); this class no longer manages global lifecycle itself.
 
     [Fact]
     public void GlobalInit_Succeeds()

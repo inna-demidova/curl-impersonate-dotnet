@@ -16,32 +16,23 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
+  <!-- Glob the staged native artifacts so the wrapper, the upstream curl-impersonate library and
+       any of its sibling runtime dependencies (e.g. zlib.dll on Windows) are all packed and copied
+       (transitively) into consuming output dirs. Staged by build-*.ps1 + fetch-upstream.ps1. -->
   <ItemGroup>
-    <None Include="runtimes/win-x64/native/cidn_wrapper.dll"
+    <None Include="runtimes/win-x64/native/*.dll"
           Condition="Exists('runtimes/win-x64/native/cidn_wrapper.dll')">
       <Pack>true</Pack>
-      <PackagePath>runtimes/win-x64/native/cidn_wrapper.dll</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="runtimes/win-x64/native/libcurl-impersonate.dll"
-          Condition="Exists('runtimes/win-x64/native/libcurl-impersonate.dll')">
-      <Pack>true</Pack>
-      <PackagePath>runtimes/win-x64/native/libcurl-impersonate.dll</PackagePath>
+      <PackagePath>runtimes/win-x64/native/%(Filename)%(Extension)</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="runtimes/linux-x64/native/libcidn_wrapper.so"
+    <None Include="runtimes/linux-x64/native/*.so*"
           Condition="Exists('runtimes/linux-x64/native/libcidn_wrapper.so')">
       <Pack>true</Pack>
-      <PackagePath>runtimes/linux-x64/native/libcidn_wrapper.so</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="runtimes/linux-x64/native/libcurl-impersonate-chrome.so"
-          Condition="Exists('runtimes/linux-x64/native/libcurl-impersonate-chrome.so')">
-      <Pack>true</Pack>
-      <PackagePath>runtimes/linux-x64/native/libcurl-impersonate-chrome.so</PackagePath>
+      <PackagePath>runtimes/linux-x64/native/%(Filename)%(Extension)</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

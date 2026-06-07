@@ -8,13 +8,13 @@ namespace CurlImpersonate.Tests;
 /// Verifies that the CURLSH cookie jar persists cookies across requests in the same session.
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection("native")]
 public class CookieAndSessionReuseTests : IDisposable
 {
     private readonly ImpersonateClient _client;
 
     public CookieAndSessionReuseTests()
     {
-        NativeLoader.Initialize();
         _client = new ImpersonateClient(new ClientOptions
         {
             DefaultTarget = ImpersonateTarget.Chrome131,
@@ -23,11 +23,7 @@ public class CookieAndSessionReuseTests : IDisposable
         });
     }
 
-    public void Dispose()
-    {
-        _client.Dispose();
-        NativeLoader.Cleanup();
-    }
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task CookieSetThenRead_PersistsAcrossRequests()

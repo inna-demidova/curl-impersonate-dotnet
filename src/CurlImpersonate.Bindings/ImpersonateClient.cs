@@ -28,6 +28,7 @@ public sealed class ImpersonateClient : IDisposable, IAsyncDisposable
             var err = Marshal.PtrToStringAnsi(NativeMethods.LastError()) ?? "unknown";
             throw new CurlImpersonateException($"cidn_session_create failed: {err}");
         }
+        NativeLoader.RegisterClient();
     }
 
     // -----------------------------------------------------------------
@@ -59,9 +60,12 @@ public sealed class ImpersonateClient : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Executes the request via the streaming path. The response body is available as a
-    /// <see cref="Stream"/> on the returned <see cref="StreamingResponse"/>. Use
+    /// Executes the request via the chunked write-callback path. The body is collected from the
+    /// native write callbacks and <b>fully buffered in memory</b> before this method returns; the
+    /// <see cref="StreamingResponse.Body"/> stream is a read-only view over that buffer (it does
+    /// <i>not</i> stream incrementally and provides no backpressure). Use
     /// <see cref="StreamingResponse.ChunkCount"/> to inspect how many write callbacks fired.
+    /// The buffered body is capped (~2 GiB) by the native layer; larger responses are aborted.
     /// </summary>
     public async Task<StreamingResponse> SendStreamingAsync(
         ImpersonateRequest request, CancellationToken ct = default)
@@ -105,7 +109,7 @@ public sealed class ImpersonateClient : IDisposable, IAsyncDisposable
                 var statusCode = (HttpStatusCode)resp.StatusCode;
 
                 var headersBlob = resp.HeadersBlob != IntPtr.Zero
-                    ? Marshal.PtrToStringAnsi(resp.HeadersBlob) ?? string.Empty
+                    ? Marshal.PtrToStringUTF8(resp.HeadersBlob) ?? string.Empty
                     : string.Empty;
                 var headers = ImpersonateResponse.ParseHeaders(headersBlob);
 
@@ -117,7 +121,7 @@ public sealed class ImpersonateClient : IDisposable, IAsyncDisposable
                 Uri? effectiveUrl = null;
                 if (resp.EffectiveUrl != IntPtr.Zero)
                 {
-                    var effStr = Marshal.PtrToStringAnsi(resp.EffectiveUrl);
+                    var effStr = Marshal.PtrToStringUTF8(resp.EffectiveUrl);
                     if (effStr != null) Uri.TryCreate(effStr, UriKind.Absolute, out effectiveUrl);
                 }
 
@@ -295,6 +299,7 @@ public sealed class ImpersonateClient : IDisposable, IAsyncDisposable
         {
             NativeMethods.SessionDestroy(_session);
             _session = IntPtr.Zero;
+            NativeLoader.UnregisterClient();
         }
     }
 
