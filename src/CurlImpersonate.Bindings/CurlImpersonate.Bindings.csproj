@@ -7,7 +7,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <PackageId>CurlImpersonate.Bindings</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Authors>curl-impersonate-dotnet contributors</Authors>
     <Description>.NET bindings for curl-impersonate: browser TLS/HTTP2 fingerprint impersonation (JA3/JA4). Bundles win-x64 and linux-x64 native libraries.</Description>
     <PackageTags>curl;impersonate;tls;fingerprint;http;browser</PackageTags>
